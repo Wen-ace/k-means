@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<div id="k-mean">
+
+</div>
+</body>
+<script>
+    function KMeans(options) {
+        this.options = options;
+		this.flag = false;
+        this.xy = options.data || this.createDots(this.options.num);
+        this.centerDots = this.selectCenterDots(this.xy);
+        this.init();
+    }
+    KMeans.prototype = {
+        constructor: KMeans,
+        init: function () {
+            var centerDots = this.centerDots;
+            this.drawing(this.xy);
+            this.paintDots(this.ctx, this.centerDots, "black");
+            this.study(centerDots);
+        },
+        study: function (centerDots) {
+			clearTimeout(this.timerId);
+			if(this.flag) return;
+            var _this = this;
+            var source = centerDots;
+            this.paintDots(this.ctx, centerDots, "transparent");
+            var disArr = this.calcDistance(centerDots);
+            var adjData = this.classifyDots(centerDots, disArr);
+            this.repaintDots(adjData.classDotsArr);
+            centerDots = this.adjustCenterDots(adjData.classDotsArr);
+			if (_this.equals(centerDots,source)) {
+                clearTimeout(this.timerId);
+				_this.paintDots(this.ctx, centerDots, "black");
+				this.flag = true;
+            }
+            _this.timerId = setTimeout(function () {
+                _this.study(centerDots);
+            }, 1000);
+        },
+        dataX: function () {
+            return Math.floor(Math.random() * 400);
+        },
+        dataY: function () {
+            return Math.floor(Math.random() * 200);
+        },
+        createDots: function (num) {
+            var num = num || 0;
+            var tempArrX = [];
+            var tempArrY = [];
+            for (var i = 0; i < num; i++) {
+                tempArrX.push(this.dataX());
+                tempArrY.push(this.dataY());
+            }
+            return this.formatArr(tempArrX, tempArrY);
+        },
+        formatArr: function (arr1, arr2) {
+            var arr = new Array(arr1.length);
+            arr1.forEach(function (v, i) {
+                arr[i] = {"x": v};
+            });
+            arr2.forEach(function (v, i) {
+                arr[i]["y"] = v;
+            });
+            return arr;
+        },
+        drawing: function (dots) {
+            var canvas = document.createElement('canvas');
+            //将canvas对象保存到this实例对象中，方便全局调用。
+            canvas.width = 600;
+            canvas.height = 300;
+            this.ctx = canvas.getContext('2d');
+            this.paintDots(this.ctx, dots, "red");
+            var wrap = document.querySelector('#k-mean');
+            wrap.appendChild(canvas);
+        },
+        paintDots: function (ctx, dots, color) {
+            //根据dots绘制小圆点。默认颜色为黑色。
+            for (var i = 0; i < dots.length; i++) {
+                ctx.beginPath();
+                ctx.fillStyle = color;
+                ctx.arc(dots[i].x + 10, dots[i].y + 10, 3, 0, 2 * Math.PI, true);
+                ctx.strokeStyle = color;
+                ctx.stroke();
+                ctx.fill();
+                ctx.closePath();
+            }
+        },
+        selectCenterDots: function (dots) {
+            var arr = [];
+            var length = dots.length;
+            for (var i = 0; i < this.options.amount; i++) {
+                arr.push(dots[Math.floor(Math.random() * length)]);
+            }
+            return arr;
+        },
+        /**
+         *
+         * @param centerDots
+         * @returns {Array}  [[d1,d2...,d100],[...],[...]]
+         */
+        calcDistance: function (centerDots) {
+            //存放中心点到每个点的距离。
+            var arr = new Array(this.options.amount);
+            var dots = this.xy;
+            var amount = this.options.amount;
+            for (var i = 0; i < amount; i++) {
+                var distance = 0;
+                arr[i] = [];
+                for (var j = 0; j < dots.length; j++) {
+                    distance = Math.pow((centerDots[i].x - dots[j].x), 2) + Math.pow((centerDots[i].y - dots[j].y), 2);
+                    arr[i].push(Math.sqrt(distance));
+                }
+            }
+            return arr;
+        },
+        /**
+         * 将点进行分类。
+         * @param centerDots  [[d1,d2...],[d1,d2...],[d1,d2...]]
+         * @param disArr
+         * @returns {{classDisArr: Array, classDotsArr: Array}}              {[[d1,d2...],[d1,d2...],[d1,d2...]]
+         *            classDisArr 是分类之后的距离。  classDotsArr 是分类只有的点    第一类      第二类      第三类
+         */
+        classifyDots: function (centerDots, disArr) {
+            //初始化一个二维数组，保存分类之后的点。
+            var classDotsArr = new Array(this.options.amount);
+            //初始化一个二维空数组，保存距离参数。
+            var arr = new Array(this.options.amount);
+            for (var k = 0; k < this.options.amount; k++) {
+                arr[k] = [];
+                classDotsArr[k] = [];
+            }
+            var length = this.options.num;
+            for (var i = 0; i < length; i++) {
+                var min = disArr[0][i];
+                var minIndex = 0;
+                for (var j = 0; j < this.options.amount; j++) {
+                    if (disArr[j][i] < min) {
+                        min = disArr[j][i];
+                        minIndex = j;
+                    }
+                }
+                arr[minIndex].push(min);
+                classDotsArr[minIndex].push(this.xy[i]);
+            }
+            return {'classDisArr': arr, 'classDotsArr': classDotsArr};
+        },
+        //找出最大x,y 和最小x,y 求平均值，将该点视为中心点。
+        adjustCenterDots: function (classDots) {
+            // 储存新的中心点
+            var arr = new Array(this.options.amount);
+            for (var i = 0; i < this.options.amount; i++) {
+                arr[i] = [];
+                var tempX = [];
+                var tempY = [];
+                for (var j = 0; j < classDots[i].length; j++) {
+                    tempX.push(classDots[i][j].x);
+                    tempY.push(classDots[i][j].y);
+                }
+                var maxX = this.findMax(tempX);
+                var minX = this.findMin(tempX);
+                var maxY = this.findMax(tempY);
+                var minY = this.findMin(tempY);
+                var x = (maxX + minX) / 2;
+                var y = (maxY + minY) / 2;
+                arr[i] = {x: x, y: y};
+
+            }
+            return arr;
+        },
+        findMin: function (arr) {
+            var min = arr[0];
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] < min) {
+                    min = arr[i];
+                }
+            }
+            return min;
+        },
+        findMax: function (arr) {
+            var max = arr[0];
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] > max) {
+                    max = arr[i];
+                }
+            }
+            return max;
+        },
+        repaintDots: function (classDots) {
+            var colorArr = ['red', 'blue', 'pink', 'purple', 'green'];
+            for (var i = 0; i < classDots.length; i++) {
+
+                this.paintDots(this.ctx, classDots[i], colorArr[i]);
+            }
+        },
+        equals: function (array1,array2) {
+            if (!array1 || !array2)
+                return false;
+            if (array1.length != array2.length)
+                return false;
+            for (var i = 0, l = array1.length; i < l; i++) {
+                if (array1[i] instanceof Array && array2[i] instanceof Array) {
+                    if (!array1[i].equals(array2[i]))
+                        return false;
+                }
+                else if (array1[i] instanceof Object && array2[i] instanceof Object) {
+                    if(array1[i].x !== array2[i].x){
+                        return false;
+                    }
+                    if(array1[i].y !== array2[i].y){
+                        return false;
+                    }
+                }
+                else if (array1[i] != array2[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    };
+
+    var options = {'num': 100, 'amount': 3};
+    new KMeans(options);
+</script>
+</html>
